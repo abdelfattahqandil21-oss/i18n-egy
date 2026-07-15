@@ -4,6 +4,11 @@
   "compileOnSave": false,
   "compilerOptions": {
     "strict": true,
+    "paths": {
+      "i18n-egy": [
+        "./dist/i18n-egy"
+      ]
+    },
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
     "noImplicitReturns": true,
@@ -22,5 +27,13 @@
     "typeCheckHostBindings": true,
     "strictTemplates": true
   },
-  "files": []
+  "files": [],
+  "references": [
+    {
+      "path": "./projects/i18n-egy/tsconfig.lib.json"
+    },
+    {
+      "path": "./projects/i18n-egy/tsconfig.spec.json"
+    }
+  ]
 }

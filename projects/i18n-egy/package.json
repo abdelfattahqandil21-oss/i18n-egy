@@ -1,0 +1,30 @@
+{
+  "name": "i18n-egy",
+  "version": "0.1.0",
+  "description": "Modern Angular localization library powered by Signals.",
+  "keywords": [
+    "angular",
+    "i18n",
+    "localization",
+    "signals",
+    "rtl"
+  ],
+  "author": "Abdo",
+  "license": "MIT",
+  "homepage": "https://github.com/...",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/..."
+  },
+  "bugs": {
+    "url": "https://github.com/.../issues"
+  },
+  "peerDependencies": {
+    "@angular/common": "^20.3.0",
+    "@angular/core": "^20.3.0"
+  },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  },
+  "sideEffects": false
+}
