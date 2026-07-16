@@ -1,6 +1,6 @@
 {
   "name": "i18n-egy",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "description": "Modern Angular localization library powered by Signals.",
   "keywords": [
     "angular",
@@ -11,16 +11,15 @@
   ],
   "author": "Abdo",
   "license": "MIT",
-  "homepage": "https://github.com/...",
+  "homepage": "https://github.com/abdelfattahqandil21-oss/i18n-egy#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/..."
+    "url": "git+https://github.com/abdelfattahqandil21-oss/i18n-egy.git"
   },
   "bugs": {
-    "url": "https://github.com/.../issues"
+    "url": "https://github.com/abdelfattahqandil21-oss/i18n-egy/issues"
   },
   "peerDependencies": {
-    "@angular/common": "^20.3.0",
     "@angular/core": "^20.3.0"
   },
   "dependencies": {

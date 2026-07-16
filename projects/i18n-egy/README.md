@@ -1,63 +1,66 @@
-# I18nEgy
+# i18n-egy
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.3.0.
+Modern Angular internationalization library powered by Signals. Zero runtime dependencies, fully tree-shakable, SSR safe.
 
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## Installation
 
 ```bash
-ng generate component component-name
+npm install i18n-egy
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+## Quick Start
 
-```bash
-ng generate --help
+```typescript
+// main.ts
+import { bootstrapApplication } from '@angular/platform-browser';
+import { provideI18n } from 'i18n-egy';
+import { AppComponent } from './app/app.component';
+
+bootstrapApplication(AppComponent, {
+  providers: [
+    provideI18n({
+      defaultLanguage: 'ar',
+      languages: [
+        { id: 'ar', nativeName: 'العربية', displayName: 'Arabic', dir: 'rtl' },
+        { id: 'en', nativeName: 'English', displayName: 'English', dir: 'ltr' },
+      ],
+    }),
+  ],
+});
 ```
 
-## Building
+```typescript
+// any component
+import { Component, inject } from '@angular/core';
+import { I18nService } from 'i18n-egy';
 
-To build the library, run:
-
-```bash
-ng build i18n-egy
+@Component({
+  selector: 'app-root',
+  standalone: true,
+  template: `
+    <p>Language: {{ i18n.currentLanguage() }}</p>
+    <button (click)="i18n.toggle()">Switch</button>
+  `,
+})
+export class AppComponent {
+  i18n = inject(I18nService);
+}
 ```
 
-This command will compile your project, and the build artifacts will be placed in the `dist/` directory.
+## Features
 
-### Publishing the Library
+- Signals-based reactive state
+- Type-safe language configuration
+- Automatic RTL/LTR direction management
+- localStorage persistence
+- SSR safe
+- Tree-shakable
+- Zero runtime dependencies
 
-Once the project is built, you can publish your library by following these steps:
+## Documentation
 
-1. Navigate to the `dist` directory:
-   ```bash
-   cd dist/i18n-egy
-   ```
+See the [README](https://github.com/.../i18n-egy#readme) for full documentation.
 
-2. Run the `npm publish` command to publish your library to the npm registry:
-   ```bash
-   npm publish
-   ```
+## License
 
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+MIT
