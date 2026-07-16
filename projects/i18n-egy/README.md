@@ -31,8 +31,8 @@ bootstrapApplication(AppComponent, {
 
 ```typescript
 // any component
-import { Component, inject } from '@angular/core';
-import { I18nService } from 'i18n-egy';
+import { Component } from '@angular/core';
+import { injectLanguage } from 'i18n-egy';
 
 @Component({
   selector: 'app-root',
@@ -43,7 +43,7 @@ import { I18nService } from 'i18n-egy';
   `,
 })
 export class AppComponent {
-  i18n = inject(I18nService);
+  i18n = injectLanguage();
 }
 ```
 
@@ -59,7 +59,7 @@ export class AppComponent {
 
 ## Documentation
 
-See the [README](https://github.com/.../i18n-egy#readme) for full documentation.
+See the [README](https://github.com/abdelfattahqandil21-oss/i18n-egy#readme) for full documentation.
 
 ## License
 
