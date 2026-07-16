@@ -11,12 +11,11 @@ npm install i18n-egy
 ## Quick Start
 
 ```typescript
-// main.ts
-import { bootstrapApplication } from '@angular/platform-browser';
+// app.config.ts
+import { ApplicationConfig } from '@angular/core';
 import { provideI18n } from 'i18n-egy';
-import { AppComponent } from './app/app.component';
 
-bootstrapApplication(AppComponent, {
+export const appConfig: ApplicationConfig = {
   providers: [
     provideI18n({
       defaultLanguage: 'ar',
@@ -26,7 +25,7 @@ bootstrapApplication(AppComponent, {
       ],
     }),
   ],
-});
+};
 ```
 
 ```typescript

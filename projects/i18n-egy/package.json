@@ -1,6 +1,6 @@
 {
   "name": "i18n-egy",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Modern Angular localization library powered by Signals.",
   "keywords": [
     "angular",

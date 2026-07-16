@@ -79,32 +79,21 @@ pnpm add i18n-egy
 ### 1. Configure the library
 
 ```typescript
-// main.ts
-import { bootstrapApplication } from '@angular/platform-browser';
+// app.config.ts
+import { ApplicationConfig } from '@angular/core';
 import { provideI18n } from 'i18n-egy';
-import { AppComponent } from './app/app.component';
 
-bootstrapApplication(AppComponent, {
+export const appConfig: ApplicationConfig = {
   providers: [
     provideI18n({
       defaultLanguage: 'ar',
       languages: [
-        {
-          id: 'ar',
-          nativeName: 'العربية',
-          displayName: 'Arabic',
-          dir: 'rtl',
-        },
-        {
-          id: 'en',
-          nativeName: 'English',
-          displayName: 'English',
-          dir: 'ltr',
-        },
+        { id: 'ar', nativeName: 'العربية', displayName: 'Arabic', dir: 'rtl' },
+        { id: 'en', nativeName: 'English', displayName: 'English', dir: 'ltr' },
       ],
     }),
   ],
-});
+};
 ```
 
 ### 2. Inject and use the service
