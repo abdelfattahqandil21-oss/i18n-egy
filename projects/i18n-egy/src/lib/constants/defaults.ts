@@ -46,3 +46,18 @@ export const DEFAULT_STORAGE_STRATEGY: StorageStrategy = 'local';
  * ```
  */
 export const DEFAULT_DIRECTION: Direction = 'ltr';
+
+/**
+ * Default value for automatic `dir`/`lang` application on the document root.
+ *
+ * @remarks
+ * Used as a fallback when no `autoApplyDirection` is specified in the
+ * `I18nConfig`. Enabled by default so RTL/LTR direction switching works
+ * out of the box without any manual DOM wiring.
+ *
+ * @example
+ * ```typescript
+ * const auto: boolean = DEFAULT_AUTO_APPLY_DIRECTION; // true
+ * ```
+ */
+export const DEFAULT_AUTO_APPLY_DIRECTION = true;

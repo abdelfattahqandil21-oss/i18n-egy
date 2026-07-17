@@ -118,4 +118,37 @@ export interface I18nConfig<T extends string = string> {
    * ```
    */
   storageStrategy?: StorageStrategy;
+
+  /**
+   * Whether to automatically apply `dir` and `lang` attributes to the
+   * document's root `<html>` element whenever the language changes.
+   *
+   * @remarks
+   * When enabled (the default), the library keeps `document.documentElement.dir`
+   * and `document.documentElement.lang` in sync with the current language on
+   * every change, so RTL/LTR layout switches without any manual wiring.
+   *
+   * Set this to `false` if your application manages the `dir`/`lang`
+   * attributes itself (for example, a custom layout shell) and you want to
+   * avoid conflicting writes to the DOM.
+   *
+   * This setting has no effect in SSR environments, where `document` is
+   * unavailable and the write is skipped automatically.
+   *
+   * @default true
+   *
+   * @example
+   * ```typescript
+   * // Default: library manages dir/lang automatically
+   * provideI18n({ defaultLanguage: 'ar', languages: [...] });
+   *
+   * // Opt out: handle dir/lang yourself
+   * provideI18n({
+   *   defaultLanguage: 'ar',
+   *   languages: [...],
+   *   autoApplyDirection: false,
+   * });
+   * ```
+   */
+  autoApplyDirection?: boolean;
 }

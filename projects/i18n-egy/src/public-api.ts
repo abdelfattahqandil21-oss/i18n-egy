@@ -8,6 +8,7 @@ export type { Translation } from './lib/types/translation';
 export type { I18nConfig } from './lib/types/i18n-config';
 export type { StorageStrategy } from './lib/types/storage-strategy';
 export { provideI18n } from './lib/providers/provide-i18n';
-export { injectLanguage } from './lib/inject/inject-language'
+export { I18nService } from './lib/services/i18n.service';
+export { injectLanguage } from './lib/inject/inject-language';
 
 

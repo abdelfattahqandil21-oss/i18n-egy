@@ -8,25 +8,28 @@ import { Direction } from './direction';
  *
  * @remarks
  * Each language definition includes metadata used for display purposes
- * and layout direction determination. The `id` property serves as the
- * unique identifier for the language and is used throughout the library
- * to reference specific languages.
+ * and layout direction determination. The `id` and `dir` properties are
+ * required and used internally by the library (language switching,
+ * lookups, and automatic `dir`/`lang` application). `nativeName` is
+ * optional, presentation-only metadata for consumers building a
+ * language switcher UI — the library itself never reads it.
  *
  * @example
  * ```typescript
  * const arabic: Language<'ar'> = {
  *   id: 'ar',
+ *   dir: 'rtl',
  *   nativeName: 'العربية',
- *   displayName: 'Arabic',
- *   dir: 'rtl'
  * };
  *
  * const english: Language<'en'> = {
  *   id: 'en',
+ *   dir: 'ltr',
  *   nativeName: 'English',
- *   displayName: 'English',
- *   dir: 'ltr'
  * };
+ *
+ * // nativeName can be omitted entirely if you don't need it
+ * const french: Language<'fr'> = { id: 'fr', dir: 'ltr' };
  * ```
  */
 export interface Language<T extends string = string> {
@@ -51,8 +54,11 @@ export interface Language<T extends string = string> {
    * Language name written in its native script.
    *
    * @remarks
-   * This is displayed to users who are familiar with the language
-   * and is useful for language switcher UIs.
+   * Optional, presentation-only metadata — the library never reads
+   * this value internally. Useful when building a language switcher
+   * UI where each language should be displayed in its own script
+   * (e.g. so an Arabic speaker recognizes "العربية" regardless of
+   * which language the UI currently renders in).
    *
    * @example
    * ```typescript
@@ -61,23 +67,7 @@ export interface Language<T extends string = string> {
    * const nativeName = 'Deutsch'; // German
    * ```
    */
-  nativeName: string;
-
-  /**
-   * Language name written in the application's primary language.
-   *
-   * @remarks
-   * This is the localized display name of the language, useful
-   * for showing language options to users who may not recognize
-   * native script names.
-   *
-   * @example
-   * ```typescript
-   * const displayName = 'Arabic';
-   * const displayName = 'French';
-   * ```
-   */
-  displayName: string;
+  nativeName?: string;
 
   /**
    * Text rendering direction for this language.

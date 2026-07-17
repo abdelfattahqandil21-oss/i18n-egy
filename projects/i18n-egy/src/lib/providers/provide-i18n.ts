@@ -28,15 +28,13 @@ import { I18nConfig } from '../types/i18n-config';
  *       languages: [
  *         {
  *           id: 'ar',
- *           nativeName: 'العربية',
- *           displayName: 'Arabic',
- *           dir: 'rtl'
+ *           dir: 'rtl',
+ *           nativeName: 'العربية'
  *         },
  *         {
  *           id: 'en',
- *           nativeName: 'English',
- *           displayName: 'English',
- *           dir: 'ltr'
+ *           dir: 'ltr',
+ *           nativeName: 'English'
  *         }
  *       ]
  *     })

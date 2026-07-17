@@ -1,5 +1,9 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { DEFAULT_STORAGE_KEY, DEFAULT_STORAGE_STRATEGY } from '../constants/defaults';
+import {
+  DEFAULT_AUTO_APPLY_DIRECTION,
+  DEFAULT_STORAGE_KEY,
+  DEFAULT_STORAGE_STRATEGY,
+} from '../constants/defaults';
 import { I18N_CONFIG } from '../tokens/i18n-config.token';
 import { Direction } from '../types/direction';
 import { Language } from '../types/language';
@@ -21,6 +25,8 @@ import { safeGetItem, safeSetItem } from '../utils/storage';
  * - Text direction (LTR/RTL)
  * - Language persistence (configurable: localStorage, sessionStorage, or none)
  * - Inline translation resolution
+ * - Automatic `dir`/`lang` attribute sync on `<html>` (unless
+ *   `autoApplyDirection: false` is set, see {@link I18nConfig})
  *
  * @example
  * ```typescript
@@ -47,6 +53,8 @@ export class I18nService<L extends string = string> {
   private readonly _storageKey = this._config.storageKey ?? DEFAULT_STORAGE_KEY;
   private readonly _storageStrategy: StorageStrategy =
     this._config.storageStrategy ?? DEFAULT_STORAGE_STRATEGY;
+  private readonly _autoApplyDirection: boolean =
+    this._config.autoApplyDirection ?? DEFAULT_AUTO_APPLY_DIRECTION;
 
   private readonly _currentLanguageId = signal<L>(this._resolveInitialLanguage());
   private readonly _languages = signal<readonly Language<L>[]>(this._config.languages);
@@ -153,6 +161,17 @@ export class I18nService<L extends string = string> {
       const id = this._currentLanguageId();
       safeSetItem(this._storageKey, id, this._storageStrategy);
     });
+
+    if (this._autoApplyDirection) {
+      effect(() => {
+        if (typeof document === 'undefined') {
+          return;
+        }
+        const lang = this.currentLanguageObject();
+        document.documentElement.dir = lang.dir;
+        document.documentElement.lang = lang.id;
+      });
+    }
   }
 
   /**
@@ -319,10 +338,10 @@ export class I18nService<L extends string = string> {
    * console.log(i18n.currentLanguage()); // 'en'
    * ```
    */
-  setLanguage(id: string): void {
+  setLanguage(id: L): void {
     const lang = this._languages().find((l) => l.id === id);
     if (lang) {
-      this._currentLanguageId.set(id as L);
+      this._currentLanguageId.set(id);
     }
   }
 
