@@ -22,8 +22,8 @@ import { StorageStrategy } from './storage-strategy';
  * provideI18n({
  *   defaultLanguage: 'ar',
  *   languages: [
- *     { id: 'ar', nativeName: 'العربية', displayName: 'Arabic', dir: 'rtl' },
- *     { id: 'en', nativeName: 'English', displayName: 'English', dir: 'ltr' }
+ *     { id: 'ar', dir: 'rtl', nativeName: 'العربية' },
+ *     { id: 'en', dir: 'ltr', nativeName: 'English' }
  *   ]
  * });
  *
@@ -43,8 +43,8 @@ export interface I18nConfig<T extends string = string> {
    * @example
    * ```typescript
    * languages: [
-   *   { id: 'ar', nativeName: 'العربية', displayName: 'Arabic', dir: 'rtl' },
-   *   { id: 'en', nativeName: 'English', displayName: 'English', dir: 'ltr' }
+   *   { id: 'ar', dir: 'rtl', nativeName: 'العربية' },
+   *   { id: 'en', dir: 'ltr', nativeName: 'English' }
    * ]
    * ```
    */
