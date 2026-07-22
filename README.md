@@ -5,7 +5,9 @@
 [![build](https://img.shields.io/github/actions/workflow/status/abdelfattahqandil21-oss/i18n-egy/ci.yml)](https://github.com/abdelfattahqandil21-oss/i18n-egy/actions)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/i18n-egy)](https://bundlephobia.com/package/i18n-egy)
 
-Modern Angular internationalization library powered by Signals. Lightweight, fully tree-shakable, SSR safe.
+Modern Angular 22+ internationalization library powered by Signals. Lightweight, fully tree-shakable, SSR safe.
+
+Built with the new **`@Service()`** decorator — Angular 22's ergonomic shorthand for `@Injectable({ providedIn: 'root' })`.
 
 ---
 
@@ -28,9 +30,9 @@ Modern Angular internationalization library powered by Signals. Lightweight, ful
 
 ## Introduction
 
-**i18n-egy** is a lightweight, production-ready Angular library for managing multilingual applications. Built from the ground up with Angular 20+ Signals, it provides reactive language management, automatic RTL/LTR support, and a type-safe translation API.
+**i18n-egy** is a lightweight, production-ready Angular library for managing multilingual applications. Built from the ground up with Angular 22+ Signals and the new `@Service()` decorator, it provides reactive language management, automatic RTL/LTR support, and a type-safe translation API.
 
-Unlike heavier i18n solutions, i18n-egy focuses on the foundation: language state, direction, and inline translations. No HTTP loading, no pipes, no directives -- just a clean, composable API that works with Angular's modern primitives.
+Unlike heavier i18n solutions, i18n-egy focuses on the foundation: language state, direction, and inline translations. No HTTP loading, no pipes, no directives — just a clean, composable API that works with Angular's modern primitives.
 
 ---
 
@@ -47,6 +49,7 @@ Unlike heavier i18n solutions, i18n-egy focuses on the foundation: language stat
 | **Unlimited languages** | Support for any number of languages. |
 | **Configurable storage** | `localStorage`, `sessionStorage`, or no persistence. |
 | **Standalone** | Works with standalone components and modern Angular APIs. |
+| **View Transitions** | Optional smooth language-switch animations via the View Transition API. |
 
 ---
 
@@ -54,8 +57,8 @@ Unlike heavier i18n solutions, i18n-egy focuses on the foundation: language stat
 
 | Requirement | Version |
 |---|---|
-| Angular | `>= 20.0.0` |
-| TypeScript | `>= 5.9.0` |
+| Angular | `>= 22.0.0` |
+| TypeScript | `>= 6.0.0` |
 | Node.js | `>= 18.0.0` |
 
 ---
@@ -88,8 +91,8 @@ export const appConfig: ApplicationConfig = {
     provideI18n({
       defaultLanguage: 'ar',
       languages: [
-        { id: 'ar', nativeName: 'العربية', displayName: 'Arabic', dir: 'rtl' },
-        { id: 'en', nativeName: 'English', displayName: 'English', dir: 'ltr' },
+        { id: 'ar', nativeName: 'العربية', dir: 'rtl' },
+        { id: 'en', nativeName: 'English', dir: 'ltr' },
       ],
     }),
   ],
@@ -129,6 +132,9 @@ export class AppComponent {
 | `defaultLanguage` | `string` | Yes | -- | Default language ID (must match a language in the array) |
 | `storageKey` | `string` | No | `'i18n-egy.language'` | Key used for persistence |
 | `storageStrategy` | `'local' \| 'session' \| 'none'` | No | `'local'` | Where to persist the language |
+| `autoApplyDirection` | `boolean` | No | `true` | Auto-sync `dir`/`lang` on `<html>` |
+| `viewTransition` | `ViewTransitionConfig` | No | `undefined` | Optional language-switch animations |
+| `loader` | `LoaderDescriptor` | No | `undefined` | Pluggable translation loader for key-based `translate()` |
 
 ### `Language`
 
@@ -136,8 +142,15 @@ export class AppComponent {
 |---|---|---|
 | `id` | `string` | Unique language identifier (e.g., `'ar'`, `'en'`) |
 | `nativeName` | `string` | Language name in its native script |
-| `displayName` | `string` | Language name in the app's primary language |
 | `dir` | `'ltr' \| 'rtl'` | Text rendering direction |
+
+### `ViewTransitionConfig`
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | `boolean` | `false` | Enable View Transition API for language switches |
+| `skipInitialTransition` | `boolean` | `true` | Skip animation on the first language change |
+| `onViewTransitionCreated` | `(info: ViewTransitionInfo) => void` | `undefined` | Callback when a transition starts |
 
 ### Storage Strategies
 
@@ -156,25 +169,18 @@ provideI18n({
   defaultLanguage: 'ar',
   storageKey: 'my-app-language',
   storageStrategy: 'session',
+  autoApplyDirection: true,
+  viewTransition: {
+    enabled: true,
+    skipInitialTransition: true,
+    onViewTransitionCreated(info) {
+      console.log(`Transitioning to ${info.language} (${info.direction})`);
+    },
+  },
   languages: [
-    {
-      id: 'ar',
-      nativeName: 'العربية',
-      displayName: 'Arabic',
-      dir: 'rtl',
-    },
-    {
-      id: 'en',
-      nativeName: 'English',
-      displayName: 'English',
-      dir: 'ltr',
-    },
-    {
-      id: 'fr',
-      nativeName: 'Francais',
-      displayName: 'French',
-      dir: 'ltr',
-    },
+    { id: 'ar', nativeName: 'العربية', dir: 'rtl' },
+    { id: 'en', nativeName: 'English', dir: 'ltr' },
+    { id: 'fr', nativeName: 'Francais', dir: 'ltr' },
   ],
 });
 ```
@@ -210,7 +216,7 @@ export class MyComponent {
 
 ### `I18nService`
 
-The core service providing all i18n state and operations. Inject via `injectLanguage()` or `inject(I18nService)`.
+The core service providing all i18n state and operations. Decorated with Angular 22's `@Service()` — auto-provided in root, tree-shakable, singleton.
 
 #### Signals (readonly)
 
@@ -235,6 +241,70 @@ The core service providing all i18n state and operations. Inject via `injectLang
 | `previous()` | `() => void` | Cycle to the previous language |
 | `getLanguage(id)` | `(id: L) => Language<L> \| undefined` | Look up a language by ID |
 
+### `ViewTransitionService`
+
+Angular 22 service decorated with `@Service()` that wraps the View Transition API.
+
+```typescript
+import { ViewTransitionService } from 'i18n-egy';
+
+const vt = inject(ViewTransitionService);
+vt.run(() => {
+  // DOM changes wrapped in a smooth cross-fade
+});
+```
+
+### Loader Factories
+
+#### `jsonLoader(options?)`
+
+Loads translations from JSON files via `fetch()`. The actual fetch logic is in a separate chunk loaded only when first used.
+
+```typescript
+import { jsonLoader } from 'i18n-egy';
+
+// Loads from /my-i18n/{language}.json
+const loader = jsonLoader({ path: '/my-i18n' });
+```
+
+#### `httpLoader(options)`
+
+Fetches translations from an HTTP endpoint. No Angular `HttpClient` dependency — uses native `fetch()`.
+
+```typescript
+import { httpLoader } from 'i18n-egy';
+
+const loader = httpLoader({
+  endpoint: 'https://api.example.com/translations',
+  buildUrl: (lang) => `https://api.example.com/v2/i18n/${lang}`,
+});
+```
+
+#### `remoteLoader(options)`
+
+Full control over the request — custom URL builder and headers.
+
+```typescript
+import { remoteLoader } from 'i18n-egy';
+
+const loader = remoteLoader({
+  url: (lang) => `https://api.example.com/i18n/${lang}`,
+  headers: { Authorization: 'Bearer token' },
+});
+```
+
+#### `customLoader(load)`
+
+Wrap any function as a loader — ideal for mocks, in-memory data, or wrapping third-party SDKs.
+
+```typescript
+import { customLoader } from 'i18n-egy';
+
+const loader = customLoader(async (lang) => ({
+  greeting: lang === 'ar' ? 'مرحبا' : 'Hello',
+}));
+```
+
 ### `Translation<T>`
 
 A type-safe record mapping language identifiers to translated strings.
@@ -258,10 +328,10 @@ type Translation<T extends string> = Record<T, string>;
 provideI18n({
   defaultLanguage: 'en',
   languages: [
-    { id: 'ar', nativeName: 'العربية', displayName: 'Arabic', dir: 'rtl' },
-    { id: 'en', nativeName: 'English', displayName: 'English', dir: 'ltr' },
-    { id: 'fr', nativeName: 'Francais', displayName: 'French', dir: 'ltr' },
-    { id: 'de', nativeName: 'Deutsch', displayName: 'German', dir: 'ltr' },
+    { id: 'ar', nativeName: 'العربية', dir: 'rtl' },
+    { id: 'en', nativeName: 'English', dir: 'ltr' },
+    { id: 'fr', nativeName: 'Francais', dir: 'ltr' },
+    { id: 'de', nativeName: 'Deutsch', dir: 'ltr' },
   ],
 });
 ```
@@ -294,7 +364,7 @@ export class MyComponent {
     <nav [attr.dir]="i18n.dir()">
       @for (lang of i18n.languages(); track lang.id) {
         <button (click)="i18n.setLanguage(lang.id)">
-          {{ lang.displayName }}
+          {{ lang.nativeName }}
         </button>
       }
     </nav>
@@ -327,7 +397,7 @@ export class LangDropdownComponent {
 }
 ```
 
-### Inline translations
+### Inline translations (always available)
 
 ```typescript
 const saveLabel = i18n.translate({
@@ -335,9 +405,29 @@ const saveLabel = i18n.translate({
   en: 'Save',
   fr: 'Enregistrer',
 });
-
-const cancelLabel = i18n.translate('cancel', 'Cancel');
 ```
+
+### Key-based translations (with loader)
+
+```typescript
+import { jsonLoader } from 'i18n-egy';
+
+provideI18n({
+  defaultLanguage: 'ar',
+  languages: [
+    { id: 'ar', nativeName: 'العربية', dir: 'rtl' },
+    { id: 'en', nativeName: 'English', dir: 'ltr' },
+  ],
+  loader: jsonLoader({ path: '/assets/i18n' }),
+});
+```
+
+```typescript
+// Uses the loaded JSON: { "home.title": "مرحبا", ... }
+const title = i18n.translate('home.title', 'Fallback Title');
+```
+
+See the [Loader API](#loader-factories) for all available loaders.
 
 ### Language cycling
 
@@ -345,7 +435,7 @@ const cancelLabel = i18n.translate('cancel', 'Cancel');
 @Component({
   template: `
     <button (click)="i18n.previous()">Previous Language</button>
-    <span>{{ i18n.currentLanguageObject().displayName }}</span>
+    <span>{{ i18n.currentLanguageObject().nativeName }}</span>
     <button (click)="i18n.next()">Next Language</button>
   `,
 })
@@ -360,7 +450,7 @@ export class LangSwitcherComponent {
 
 ### Does this load translation files?
 
-No. i18n-egy focuses on language management, direction, and inline translations. External translation file loading (JSON, etc.) is planned for a future release.
+Yes — optionally. i18n-egy ships with pluggable loaders for JSON files, HTTP endpoints, and custom sources. Configure a `loader` in `I18nConfig` to enable key-based `translate('home.title')` lookups. If no loader is configured, the inline typed API (`translate({ ar: 'مرحبا', en: 'Hello' })`) works as before.
 
 ### Does it work with SSR?
 
@@ -385,8 +475,8 @@ Yes. The configuration accepts any number of languages. Adding a new language on
 
 ## Roadmap
 
-- [ ] Translation JSON file loading
-- [ ] HTTP-based translation fetching
+- [x] Translation JSON file loading
+- [x] HTTP-based translation fetching
 - [ ] Pluralization support
 - [ ] Interpolation with parameters
 - [ ] Browser language detection
