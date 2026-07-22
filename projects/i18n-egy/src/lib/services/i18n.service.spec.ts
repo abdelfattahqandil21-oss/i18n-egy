@@ -2,16 +2,31 @@ import { TestBed } from '@angular/core/testing';
 import { I18nService } from './i18n.service';
 import { provideI18n } from '../providers/provide-i18n';
 import { Language } from '../types/language';
+import { LoaderDescriptor } from '../types/loader';
 
 const LANGUAGES: readonly Language<'ar' | 'en' | 'fr'>[] = [
-  { id: 'ar', nativeName: 'العربية', displayName: 'Arabic', dir: 'rtl' },
-  { id: 'en', nativeName: 'English', displayName: 'English', dir: 'ltr' },
-  { id: 'fr', nativeName: 'Francais', displayName: 'French', dir: 'ltr' },
+  { id: 'ar', nativeName: 'العربية', dir: 'rtl' },
+  { id: 'en', nativeName: 'English', dir: 'ltr' },
+  { id: 'fr', nativeName: 'Francais', dir: 'ltr' },
 ];
+
+const MOCK_TRANSLATIONS: Record<string, string> = {
+  welcome: 'مرحباً',
+  save: 'حفظ',
+};
+
+function mockLoaderDescriptor(): LoaderDescriptor<string> {
+  return {
+    resolve: jasmine.createSpy('resolve').and.resolveTo({
+      load: jasmine.createSpy('load').and.resolveTo({ ...MOCK_TRANSLATIONS }),
+    }),
+  };
+}
 
 function setup(storageStrategy: 'local' | 'session' | 'none' = 'none') {
   TestBed.configureTestingModule({
     providers: [
+      I18nService,
       provideI18n({
         defaultLanguage: 'ar',
         languages: LANGUAGES,
@@ -20,6 +35,39 @@ function setup(storageStrategy: 'local' | 'session' | 'none' = 'none') {
     ],
   });
   return TestBed.inject(I18nService);
+}
+
+function setupWithLoader() {
+  TestBed.configureTestingModule({
+    providers: [
+      I18nService,
+      provideI18n({
+        defaultLanguage: 'ar',
+        languages: LANGUAGES,
+        storageStrategy: 'none',
+        loader: mockLoaderDescriptor(),
+      }),
+    ],
+  });
+  return TestBed.inject(I18nService);
+}
+
+function setupWithLoaderAndSpy() {
+  const loadSpy = jasmine.createSpy('load').and.resolveTo({ ...MOCK_TRANSLATIONS });
+  TestBed.configureTestingModule({
+    providers: [
+      I18nService,
+      provideI18n({
+        defaultLanguage: 'ar',
+        languages: LANGUAGES,
+        storageStrategy: 'none',
+        loader: {
+          resolve: jasmine.createSpy('resolve').and.resolveTo({ load: loadSpy }),
+        },
+      }),
+    ],
+  });
+  return { service: TestBed.inject(I18nService), spy: loadSpy };
 }
 
 describe('I18nService', () => {
@@ -52,7 +100,6 @@ describe('I18nService', () => {
       const lang = service.currentLanguageObject();
       expect(lang.id).toBe('ar');
       expect(lang.nativeName).toBe('العربية');
-      expect(lang.displayName).toBe('Arabic');
       expect(lang.dir).toBe('rtl');
     });
   });
@@ -62,6 +109,7 @@ describe('I18nService', () => {
       expect(() => {
         TestBed.configureTestingModule({
           providers: [
+            I18nService,
             provideI18n({
               defaultLanguage: 'ar',
               languages: [],
@@ -77,6 +125,7 @@ describe('I18nService', () => {
       expect(() => {
         TestBed.configureTestingModule({
           providers: [
+            I18nService,
             provideI18n({
               defaultLanguage: 'de',
               languages: LANGUAGES,
@@ -110,6 +159,19 @@ describe('I18nService', () => {
       const service = setup();
       service.setLanguage('fr');
       expect(service.currentLanguageObject().nativeName).toBe('Francais');
+    });
+
+    it('should ignore duplicate language changes', () => {
+      const service = setup();
+      service.setLanguage('ar');
+      expect(service.currentLanguage()).toBe('ar');
+    });
+
+    it('should ignore duplicate after actual change', () => {
+      const service = setup();
+      service.setLanguage('en');
+      service.setLanguage('en');
+      expect(service.currentLanguage()).toBe('en');
     });
   });
 
@@ -245,15 +307,151 @@ describe('I18nService', () => {
       const result = service.translate({});
       expect(result).toBe('');
     });
+
+    it('should return key when no loader is configured', () => {
+      const service = setup();
+      expect(service.translate('welcome')).toBe('welcome');
+    });
+
+    it('should return defaultValue when no loader is configured', () => {
+      const service = setup();
+      expect(service.translate('welcome', 'Welcome')).toBe('Welcome');
+    });
+
+    it('should return loaded value when loader is configured and data loaded', async () => {
+      const service = setupWithLoader();
+      await service.loadTranslations('ar');
+      const result = service.translate('welcome');
+      expect(result).toBe('مرحباً');
+    });
+
+    it('should return defaultValue for missing key even with loader', async () => {
+      const service = setupWithLoader();
+      await service.loadTranslations('ar');
+      const result = service.translate('nonexistent', 'default');
+      expect(result).toBe('default');
+    });
+
+    it('should return key for missing key and no default even with loader', async () => {
+      const service = setupWithLoader();
+      await service.loadTranslations('ar');
+      const result = service.translate('nonexistent');
+      expect(result).toBe('nonexistent');
+    });
+  });
+
+  describe('loadedTranslations', () => {
+    it('should be empty by default', () => {
+      const service = setup();
+      expect(service.loadedTranslations()).toEqual({});
+    });
+
+    it('should contain loaded data after loadTranslations with loader', async () => {
+      const service = setupWithLoader();
+      await service.loadTranslations('ar');
+      expect(service.loadedTranslations()).toEqual(MOCK_TRANSLATIONS);
+    });
+  });
+
+  describe('loadTranslations', () => {
+    it('should return empty when no loader configured', async () => {
+      const service = setup();
+      const result = await service.loadTranslations('ar');
+      expect(result).toEqual({});
+    });
+
+    it('should cache translations and not call loader again for same language', async () => {
+      const { service, spy } = setupWithLoaderAndSpy();
+      await service.loadTranslations('ar');
+      await service.loadTranslations('ar');
+      await service.loadTranslations('ar');
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('race condition guard', () => {
+    function setupControlled() {
+      const resolvers = new Map<string, (value: Record<string, string>) => void>();
+      const loadSpy = jasmine.createSpy('load').and.callFake((lang: string) =>
+        new Promise<Record<string, string>>((resolve) => resolvers.set(lang, resolve)),
+      );
+      TestBed.configureTestingModule({
+        providers: [
+          I18nService,
+          provideI18n({
+            defaultLanguage: 'ar',
+            languages: LANGUAGES,
+            storageStrategy: 'none',
+            loader: {
+              resolve: jasmine.createSpy('resolve').and.resolveTo({ load: loadSpy }),
+            },
+          }),
+        ],
+      });
+      const service = TestBed.inject(I18nService);
+      return { service, loadSpy, resolve: (lang: string, data: Record<string, string>) => resolvers.get(lang)?.(data) };
+    }
+
+    it('should discard stale out-of-order responses and keep last-requested data', async () => {
+      const { service, resolve } = setupControlled();
+
+      // Request 'en' (token 1) then 'ar' (token 2) before 'en' resolves.
+      // Both calls need a microtick to get past the await this._getLoader()
+      // guard before load() is invoked.
+      const enPromise = service.loadTranslations('en');
+      const arPromise = service.loadTranslations('ar');
+      await Promise.resolve();
+
+      // Resolve 'ar' (last requested) first
+      resolve('ar', { greeting: 'مرحبا' });
+      await arPromise;
+
+      // Resolve 'en' later — its response is stale and must not overwrite
+      resolve('en', { greeting: 'Hello' });
+      await enPromise;
+
+      // Signal must show data from the LAST requested language, not the
+      // slower one that resolved out of order
+      expect(service.loadedTranslations()).toEqual({ greeting: 'مرحبا' });
+    });
+
+    it('should still cache stale responses for future use', async () => {
+      const { service, loadSpy, resolve } = setupControlled();
+
+      // Trigger two concurrent loads — 'en' will lose the race
+      const enPromise = service.loadTranslations('en');
+      const arPromise = service.loadTranslations('ar');
+      await Promise.resolve();
+
+      resolve('ar', { greeting: 'مرحبا' });
+      resolve('en', { greeting: 'Hello' });
+      await Promise.all([arPromise, enPromise]);
+
+      // Signal shows 'ar' (the winner)
+      expect(service.loadedTranslations()).toEqual({ greeting: 'مرحبا' });
+
+      // Request 'en' again — should come from cache, not re-fetch
+      const cached = await service.loadTranslations('en');
+      expect(cached).toEqual({ greeting: 'Hello' });
+      // load() called once for 'en' (first call) + once for 'ar' = 2
+      expect(loadSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should update signal normally when there is no race', async () => {
+      const service = setupWithLoader();
+      await service.loadTranslations('ar');
+      expect(service.loadedTranslations()).toEqual(MOCK_TRANSLATIONS);
+    });
   });
 
   describe('single language', () => {
     it('should not toggle with single language', () => {
       TestBed.configureTestingModule({
         providers: [
+          I18nService,
           provideI18n({
             defaultLanguage: 'ar',
-            languages: [{ id: 'ar', nativeName: 'العربية', displayName: 'Arabic', dir: 'rtl' }],
+            languages: [{ id: 'ar', nativeName: 'العربية', dir: 'rtl' }],
             storageStrategy: 'none',
           }),
         ],
@@ -266,9 +464,10 @@ describe('I18nService', () => {
     it('should not cycle with single language', () => {
       TestBed.configureTestingModule({
         providers: [
+          I18nService,
           provideI18n({
             defaultLanguage: 'ar',
-            languages: [{ id: 'ar', nativeName: 'العربية', displayName: 'Arabic', dir: 'rtl' }],
+            languages: [{ id: 'ar', nativeName: 'العربية', dir: 'rtl' }],
             storageStrategy: 'none',
           }),
         ],
@@ -317,6 +516,7 @@ describe('I18nService', () => {
     it('should use custom storageKey', () => {
       TestBed.configureTestingModule({
         providers: [
+          I18nService,
           provideI18n({
             defaultLanguage: 'ar',
             languages: LANGUAGES,
@@ -335,6 +535,7 @@ describe('I18nService', () => {
       localStorage.setItem('my-custom-key', 'fr');
       TestBed.configureTestingModule({
         providers: [
+          I18nService,
           provideI18n({
             defaultLanguage: 'ar',
             languages: LANGUAGES,

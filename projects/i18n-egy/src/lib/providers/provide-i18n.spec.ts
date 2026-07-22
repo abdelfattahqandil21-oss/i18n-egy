@@ -9,7 +9,7 @@ describe('provideI18n', () => {
     const providers = provideI18n({
       defaultLanguage: 'ar',
       languages: [
-        { id: 'ar', nativeName: 'العربية', displayName: 'Arabic', dir: 'rtl' },
+        { id: 'ar', nativeName: 'العربية', dir: 'rtl' },
       ],
     });
     expect(providers).toBeDefined();
@@ -18,10 +18,11 @@ describe('provideI18n', () => {
   it('should make I18nService injectable', () => {
     TestBed.configureTestingModule({
       providers: [
+        I18nService,
         provideI18n({
           defaultLanguage: 'ar',
           languages: [
-            { id: 'ar', nativeName: 'العربية', displayName: 'Arabic', dir: 'rtl' },
+            { id: 'ar', nativeName: 'العربية', dir: 'rtl' },
           ],
           storageStrategy: 'none',
         }),
@@ -36,7 +37,7 @@ describe('provideI18n', () => {
     const config = {
       defaultLanguage: 'en',
       languages: [
-        { id: 'en', nativeName: 'English', displayName: 'English', dir: 'ltr' as const },
+        { id: 'en', nativeName: 'English', dir: 'ltr' as const },
       ],
       storageStrategy: 'none' as const,
     };

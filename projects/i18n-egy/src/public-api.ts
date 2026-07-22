@@ -1,14 +1,15 @@
-/*
- * Public API Surface of i18n-egy
- */
-
 export type { Direction } from './lib/types/direction';
 export type { Language } from './lib/types/language';
 export type { Translation } from './lib/types/translation';
-export type { I18nConfig } from './lib/types/i18n-config';
+export type { I18nConfig, ViewTransitionConfig, ViewTransitionInfo } from './lib/types/i18n-config';
+export type { TranslationLoader, LoaderDescriptor } from './lib/types/loader';
 export type { StorageStrategy } from './lib/types/storage-strategy';
 export { provideI18n } from './lib/providers/provide-i18n';
 export { I18nService } from './lib/services/i18n.service';
+export { ViewTransitionService } from './lib/services/view-transition.service';
 export { injectLanguage } from './lib/inject/inject-language';
-
-
+export { jsonLoader } from './lib/loaders/json-loader';
+export { httpLoader } from './lib/loaders/http-loader';
+export { remoteLoader } from './lib/loaders/remote-loader';
+export { customLoader } from './lib/loaders/custom-loader';
+export { TranslatePipe } from './lib/pipes/translate.pipe';

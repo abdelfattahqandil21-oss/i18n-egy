@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Service, computed, effect, inject, signal } from '@angular/core';
 import {
   DEFAULT_AUTO_APPLY_DIRECTION,
   DEFAULT_STORAGE_KEY,
@@ -6,50 +6,18 @@ import {
 } from '../constants/defaults';
 import { I18N_CONFIG } from '../tokens/i18n-config.token';
 import { Direction } from '../types/direction';
+import { I18nConfig } from '../types/i18n-config';
 import { Language } from '../types/language';
 import { StorageStrategy } from '../types/storage-strategy';
 import { Translation } from '../types/translation';
+import { TranslationLoader } from '../types/loader';
 import { safeGetItem, safeSetItem } from '../utils/storage';
+import { ViewTransitionService } from './view-transition.service';
 
-/**
- * Core service for internationalization (i18n) in Angular applications.
- *
- * @remarks
- * `I18nService` is the single source of truth for all i18n-related state.
- * It uses Angular Signals internally and exposes readonly signals for
- * reactive state consumption.
- *
- * The service manages:
- * - Current language selection
- * - Language list
- * - Text direction (LTR/RTL)
- * - Language persistence (configurable: localStorage, sessionStorage, or none)
- * - Inline translation resolution
- * - Automatic `dir`/`lang` attribute sync on `<html>` (unless
- *   `autoApplyDirection: false` is set, see {@link I18nConfig})
- *
- * @example
- * ```typescript
- * // Inject the service
- * const i18n = inject(I18nService);
- *
- * // Read current state via signals
- * console.log(i18n.currentLanguage());     // 'ar'
- * console.log(i18n.dir());                 // 'rtl'
- * console.log(i18n.isRtl());              // true
- *
- * // Switch languages
- * i18n.setLanguage('en');
- * i18n.next();
- * i18n.toggle();
- *
- * // Translate inline
- * const label = i18n.translate({ ar: 'حفظ', en: 'Save' });
- * ```
- */
-@Injectable({ providedIn: 'root' })
+@Service()
 export class I18nService<L extends string = string> {
-  private readonly _config = inject(I18N_CONFIG) as import('../types/i18n-config').I18nConfig<L>;
+  private readonly _config = inject<I18nConfig<L>>(I18N_CONFIG);
+  private readonly _viewTransition = inject(ViewTransitionService, { optional: true });
   private readonly _storageKey = this._config.storageKey ?? DEFAULT_STORAGE_KEY;
   private readonly _storageStrategy: StorageStrategy =
     this._config.storageStrategy ?? DEFAULT_STORAGE_STRATEGY;
@@ -58,93 +26,37 @@ export class I18nService<L extends string = string> {
 
   private readonly _currentLanguageId = signal<L>(this._resolveInitialLanguage());
   private readonly _languages = signal<readonly Language<L>[]>(this._config.languages);
-
+  private readonly _loadedTranslations = signal<Record<string, string>>({});
+  private readonly _getLoader: (() => Promise<TranslationLoader<L>>) | null =
+    this._config.loader?.resolve ?? null;
+  private _resolvedLoader: TranslationLoader<L> | null = null;
+  private readonly _translationsCache = new Map<L, Record<string, string>>();
   /**
-   * Signal that emits whenever the language changes.
-   *
-   * @returns A `Signal` of the new language ID after each change.
-   *
-   * @remarks
-   * This signal is useful for side effects that should run on every
-   * language change, such as analytics tracking or document metadata updates.
-   *
-   * @example
-   * ```typescript
-   * const i18n = inject(I18nService);
-   * effect(() => {
-   *   console.log('Language changed to:', i18n.languageChanged());
-   * });
-   * ```
+   * Monotonically increasing counter used as a "last request wins" guard.
+   * When the user switches languages rapidly, in-flight requests can resolve
+   * out of order. Each call to `_loadTranslations` captures the current
+   * token value at the start; before applying data to `_loadedTranslations`,
+   * it checks whether a newer call has already started. If so, the stale
+   * response is silently discarded — the cached data is still stored for
+   * future use, but the signal is not overwritten.
    */
+  private _requestToken = 0;
+  private _warnedNoLoader = false;
+  private _applyCount = 0;
+
   readonly languageChanged = computed<L>(() => this._currentLanguageId());
 
-  /**
-   * Reactive signal containing all configured languages.
-   *
-   * @returns A `Signal` of readonly language array.
-   *
-   * @example
-   * ```typescript
-   * const langs = i18n.languages();
-   * // [{ id: 'ar', nativeName: 'العربية', ... }, { id: 'en', ... }]
-   * ```
-   */
   readonly languages = this._languages.asReadonly();
 
-  /**
-   * Reactive signal of the current language ID string.
-   *
-   * @returns A `Signal` of the current language identifier.
-   *
-   * @example
-   * ```typescript
-   * const currentId = i18n.currentLanguage();
-   * // 'ar'
-   * ```
-   */
   readonly currentLanguage = this._currentLanguageId.asReadonly();
 
-  /**
-   * Reactive signal of the current language object.
-   *
-   * @returns A `Signal` of the full `Language` object matching the current language ID.
-   *
-   * @example
-   * ```typescript
-   * const lang = i18n.currentLanguageObject();
-   * console.log(lang.nativeName); // 'العربية'
-   * console.log(lang.dir);        // 'rtl'
-   * ```
-   */
   readonly currentLanguageObject = computed<Language<L>>(() => {
     const id = this._currentLanguageId();
     return this._languages().find((l) => l.id === id) ?? this._languages()[0];
   });
 
-  /**
-   * Reactive signal of the current text direction.
-   *
-   * @returns A `Signal` of the `Direction` (`'ltr'` or `'rtl'`).
-   *
-   * @example
-   * ```typescript
-   * const dir = i18n.dir();
-   * // 'rtl'
-   * ```
-   */
   readonly dir = computed<Direction>(() => this.currentLanguageObject().dir);
 
-  /**
-   * Reactive signal indicating whether the current language is right-to-left.
-   *
-   * @returns A `Signal` of `boolean`. `true` if the current direction is RTL.
-   *
-   * @example
-   * ```typescript
-   * const isRtl = i18n.isRtl();
-   * // true
-   * ```
-   */
   readonly isRtl = computed<boolean>(() => this.dir() === 'rtl');
 
   constructor() {
@@ -174,63 +86,37 @@ export class I18nService<L extends string = string> {
     }
   }
 
-  /**
-   * Returns a language by its identifier.
-   *
-   * @param id - The language identifier to look up.
-   * @returns The `Language` object if found, otherwise `undefined`.
-   *
-   * @example
-   * ```typescript
-   * const arabic = i18n.getLanguage('ar');
-   * console.log(arabic?.nativeName); // 'العربية'
-   * ```
-   */
+  private applyLanguage(id: L): void {
+    if (id === this._currentLanguageId()) return;
+
+    const lang = this._languages().find((l) => l.id === id);
+    if (!lang) return;
+
+    this._applyCount++;
+
+    const apply = () => this._currentLanguageId.set(id);
+    const vt = this._config.viewTransition;
+    const useTransition =
+      vt?.enabled &&
+      (!vt.skipInitialTransition || this._applyCount > 1) &&
+      this._viewTransition != null;
+
+    if (useTransition) {
+      vt!.onViewTransitionCreated?.({ language: id, direction: lang.dir });
+      this._viewTransition!.run(apply);
+    } else {
+      apply();
+    }
+
+    this._loadTranslations(id);
+  }
+
   getLanguage(id: L): Language<L> | undefined {
     return this._languages().find((l) => l.id === id);
   }
 
-  /**
-   * Translates a key with an optional default value.
-   *
-   * @param key - The translation key to look up.
-   * @param defaultValue - Optional fallback value if the key is not found.
-   * @returns The resolved translation string.
-   *
-   * @remarks
-   * This overload is designed for future integration with external
-   * translation files. Currently, it returns the `defaultValue` or
-   * the `key` itself as a fallback.
-   *
-   * @example
-   * ```typescript
-   * const label = i18n.translate('save', 'Save');
-   * // 'Save'
-   * ```
-   */
   translate(key: string, defaultValue?: string): string;
 
-  /**
-   * Resolves a translation from a type-safe translation object.
-   *
-   * @param translations - An object mapping language IDs to translated strings.
-   * @returns The translated string for the current language.
-   *
-   * @remarks
-   * The method looks up the current language ID in the provided object.
-   * If the current language is not found, it falls back to the first
-   * value in the object. This ensures a valid string is always returned.
-   *
-   * @example
-   * ```typescript
-   * const label = i18n.translate({
-   *   ar: 'حفظ',
-   *   en: 'Save'
-   * });
-   * // When current language is 'ar': 'حفظ'
-   * // When current language is 'en': 'Save'
-   * ```
-   */
   translate(translations: Translation<L>): string;
 
   translate(
@@ -238,110 +124,95 @@ export class I18nService<L extends string = string> {
     defaultValue?: string,
   ): string {
     if (typeof keyOrTranslations === 'string') {
+      const loaded = this._loadedTranslations();
+      if (keyOrTranslations in loaded) {
+        return loaded[keyOrTranslations];
+      }
+      if (!this._config.loader && !this._warnedNoLoader) {
+        this._warnedNoLoader = true;
+        if (typeof ngDevMode === 'undefined' || ngDevMode) {
+          console.warn(
+            '[i18n-egy] Key-based translate() requires a loader configured via I18nConfig.loader.',
+          );
+        }
+      }
       return defaultValue ?? keyOrTranslations;
     }
     const currentId = this._currentLanguageId();
     return keyOrTranslations[currentId] ?? Object.values(keyOrTranslations)[0] ?? '';
   }
 
-  /**
-   * Toggles between the first two configured languages.
-   *
-   * @remarks
-   * If the current language is the first language, it switches to the
-   * second. Otherwise, it switches to the first. If fewer than two
-   * languages are configured, this method has no effect.
-   *
-   * @example
-   * ```typescript
-   * // Current: 'ar', Languages: ['ar', 'en']
-   * i18n.toggle();
-   * // Current: 'en'
-   *
-   * i18n.toggle();
-   * // Current: 'ar'
-   * ```
-   */
+  loadedTranslations = this._loadedTranslations.asReadonly();
+
+  async loadTranslations(languageId: L): Promise<Record<string, string>> {
+    return this._loadTranslations(languageId);
+  }
+
   toggle(): void {
     const langs = this._languages();
     if (langs.length < 2) return;
     const currentId = this._currentLanguageId();
     const newId = currentId === langs[0].id ? langs[1].id : langs[0].id;
-    this._currentLanguageId.set(newId);
+    this.applyLanguage(newId);
   }
 
-  /**
-   * Cycles to the next language in the list.
-   *
-   * @remarks
-   * When the current language is the last in the list, it wraps
-   * around to the first language. If fewer than two languages are
-   * configured, this method has no effect.
-   *
-   * @example
-   * ```typescript
-   * // Languages: ['ar', 'en', 'fr'], Current: 'ar'
-   * i18n.next();
-   * // Current: 'en'
-   *
-   * i18n.next();
-   * // Current: 'fr'
-   *
-   * i18n.next();
-   * // Current: 'ar' (wraps around)
-   * ```
-   */
   next(): void {
     const langs = this._languages();
     if (langs.length < 2) return;
     const currentIdx = langs.findIndex((l) => l.id === this._currentLanguageId());
     const nextIdx = (currentIdx + 1) % langs.length;
-    this._currentLanguageId.set(langs[nextIdx].id);
+    this.applyLanguage(langs[nextIdx].id);
   }
 
-  /**
-   * Cycles to the previous language in the list.
-   *
-   * @remarks
-   * When the current language is the first in the list, it wraps
-   * around to the last language. If fewer than two languages are
-   * configured, this method has no effect.
-   *
-   * @example
-   * ```typescript
-   * // Languages: ['ar', 'en', 'fr'], Current: 'ar'
-   * i18n.previous();
-   * // Current: 'fr' (wraps around)
-   * ```
-   */
   previous(): void {
     const langs = this._languages();
     if (langs.length < 2) return;
     const currentIdx = langs.findIndex((l) => l.id === this._currentLanguageId());
     const prevIdx = (currentIdx - 1 + langs.length) % langs.length;
-    this._currentLanguageId.set(langs[prevIdx].id);
+    this.applyLanguage(langs[prevIdx].id);
   }
 
-  /**
-   * Sets the active language by its identifier.
-   *
-   * @param id - The language identifier to activate.
-   *
-   * @remarks
-   * If the provided ID does not match any configured language,
-   * the method has no effect. The change is automatically
-   * persisted according to the configured storage strategy.
-   *
-   * @example
-   * ```typescript
-   * i18n.setLanguage('en');
-   * console.log(i18n.currentLanguage()); // 'en'
-   * ```
-   */
   setLanguage(id: L): void {
-    const lang = this._languages().find((l) => l.id === id);
-    if (lang) {
-      this._currentLanguageId.set(id);
+    this.applyLanguage(id);
+  }
+
+  private async _loadTranslations(languageId: L): Promise<Record<string, string>> {
+    if (!this._getLoader) return {};
+
+    // Capture this request's token. If a newer call increments
+    // _requestToken before this one finishes, we must not overwrite
+    // _loadedTranslations with stale data (out-of-order resolution
+    // from rapid language switching).
+    const myToken = ++this._requestToken;
+
+    const cached = this._translationsCache.get(languageId);
+    if (cached) {
+      // Cache-hit path: only update the signal if this call
+      // is still the most recent one.
+      if (myToken === this._requestToken) {
+        this._loadedTranslations.set(cached);
+      }
+      return cached;
+    }
+
+    try {
+      if (!this._resolvedLoader) {
+        this._resolvedLoader = await this._getLoader();
+      }
+      const translations = await this._resolvedLoader.load(languageId) as Record<string, string>;
+
+      // Always cache the result — even if this call lost the race,
+      // the data is correct and useful for future lookups.
+      this._translationsCache.set(languageId, translations);
+
+      // Network path: only update the signal if still the most recent call.
+      if (myToken === this._requestToken) {
+        this._loadedTranslations.set(translations);
+      }
+
+      return translations;
+    } catch {
+      return {};
     }
   }
 
