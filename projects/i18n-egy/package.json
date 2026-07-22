@@ -1,6 +1,6 @@
 {
   "name": "i18n-egy",
-  "version": "1.0.5",
+  "version": "2.1.1",
   "description": "Modern Angular localization library powered by Signals.",
   "keywords": [
     "angular",
@@ -20,7 +20,7 @@
     "url": "https://github.com/abdelfattahqandil21-oss/i18n-egy/issues"
   },
   "peerDependencies": {
-    "@angular/core": "^20.3.0"
+    "@angular/core": "^22.0.0"
   },
   "dependencies": {
     "tslib": "^2.3.0"
