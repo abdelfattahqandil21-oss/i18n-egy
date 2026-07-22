@@ -26,11 +26,11 @@ export class I18nService<L extends string = string> {
 
   private readonly _currentLanguageId = signal<L>(this._resolveInitialLanguage());
   private readonly _languages = signal<readonly Language<L>[]>(this._config.languages);
-  private readonly _loadedTranslations = signal<Record<string, string>>({});
+  private readonly _loadedTranslations = signal<Record<string, unknown>>({});
   private readonly _getLoader: (() => Promise<TranslationLoader<L>>) | null =
     this._config.loader?.resolve ?? null;
   private _resolvedLoader: TranslationLoader<L> | null = null;
-  private readonly _translationsCache = new Map<L, Record<string, string>>();
+  private readonly _translationsCache = new Map<L, Record<string, unknown>>();
   /**
    * Monotonically increasing counter used as a "last request wins" guard.
    * When the user switches languages rapidly, in-flight requests can resolve
@@ -125,8 +125,9 @@ export class I18nService<L extends string = string> {
   ): string {
     if (typeof keyOrTranslations === 'string') {
       const loaded = this._loadedTranslations();
-      if (keyOrTranslations in loaded) {
-        return loaded[keyOrTranslations];
+      const resolved = this._resolveKey(loaded, keyOrTranslations);
+      if (resolved !== undefined) {
+        return resolved;
       }
       if (!this._config.loader && !this._warnedNoLoader) {
         this._warnedNoLoader = true;
@@ -144,7 +145,7 @@ export class I18nService<L extends string = string> {
 
   loadedTranslations = this._loadedTranslations.asReadonly();
 
-  async loadTranslations(languageId: L): Promise<Record<string, string>> {
+  async loadTranslations(languageId: L): Promise<Record<string, unknown>> {
     return this._loadTranslations(languageId);
   }
 
@@ -176,7 +177,7 @@ export class I18nService<L extends string = string> {
     this.applyLanguage(id);
   }
 
-  private async _loadTranslations(languageId: L): Promise<Record<string, string>> {
+  private async _loadTranslations(languageId: L): Promise<Record<string, unknown>> {
     if (!this._getLoader) return {};
 
     // Capture this request's token. If a newer call increments
@@ -199,7 +200,7 @@ export class I18nService<L extends string = string> {
       if (!this._resolvedLoader) {
         this._resolvedLoader = await this._getLoader();
       }
-      const translations = await this._resolvedLoader.load(languageId) as Record<string, string>;
+      const translations = await this._resolvedLoader.load(languageId);
 
       // Always cache the result — even if this call lost the race,
       // the data is correct and useful for future lookups.
@@ -214,6 +215,17 @@ export class I18nService<L extends string = string> {
     } catch {
       return {};
     }
+  }
+
+  private _resolveKey(obj: Record<string, unknown>, path: string): string | undefined {
+    const value = path.split('.').reduce<unknown>(
+      (acc, segment) =>
+        acc && typeof acc === 'object'
+          ? (acc as Record<string, unknown>)[segment]
+          : undefined,
+      obj,
+    );
+    return typeof value === 'string' ? value : undefined;
   }
 
   private _resolveInitialLanguage(): L {

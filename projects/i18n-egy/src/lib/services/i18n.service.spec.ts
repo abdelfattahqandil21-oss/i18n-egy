@@ -10,9 +10,22 @@ const LANGUAGES: readonly Language<'ar' | 'en' | 'fr'>[] = [
   { id: 'fr', nativeName: 'Francais', dir: 'ltr' },
 ];
 
-const MOCK_TRANSLATIONS: Record<string, string> = {
+const MOCK_TRANSLATIONS: Record<string, unknown> = {
   welcome: 'مرحباً',
   save: 'حفظ',
+};
+
+const NESTED_TRANSLATIONS: Record<string, unknown> = {
+  home: {
+    title: 'الرئيسية',
+    subtitle: 'مرحباً بك',
+  },
+  about: {
+    team: {
+      member: 'فريقنا',
+    },
+  },
+  onlyString: 'نص مباشر',
 };
 
 function mockLoaderDescriptor(): LoaderDescriptor<string> {
@@ -338,6 +351,107 @@ describe('I18nService', () => {
       const result = service.translate('nonexistent');
       expect(result).toBe('nonexistent');
     });
+
+    it('should resolve nested dot-path from loaded translations', async () => {
+      const loadSpy = jasmine.createSpy('load').and.resolveTo({ ...NESTED_TRANSLATIONS });
+      TestBed.configureTestingModule({
+        providers: [
+          I18nService,
+          provideI18n({
+            defaultLanguage: 'ar',
+            languages: LANGUAGES,
+            storageStrategy: 'none',
+            loader: {
+              resolve: jasmine.createSpy('resolve').and.resolveTo({ load: loadSpy }),
+            },
+          }),
+        ],
+      });
+      const service = TestBed.inject(I18nService);
+      await service.loadTranslations('ar');
+      expect(service.translate('home.title')).toBe('الرئيسية');
+      expect(service.translate('home.subtitle')).toBe('مرحباً بك');
+    });
+
+    it('should resolve deep nested dot-path', async () => {
+      const loadSpy = jasmine.createSpy('load').and.resolveTo({ ...NESTED_TRANSLATIONS });
+      TestBed.configureTestingModule({
+        providers: [
+          I18nService,
+          provideI18n({
+            defaultLanguage: 'ar',
+            languages: LANGUAGES,
+            storageStrategy: 'none',
+            loader: {
+              resolve: jasmine.createSpy('resolve').and.resolveTo({ load: loadSpy }),
+            },
+          }),
+        ],
+      });
+      const service = TestBed.inject(I18nService);
+      await service.loadTranslations('ar');
+      expect(service.translate('about.team.member')).toBe('فريقنا');
+    });
+
+    it('should return key for partial path that resolves to non-string', async () => {
+      const loadSpy = jasmine.createSpy('load').and.resolveTo({ ...NESTED_TRANSLATIONS });
+      TestBed.configureTestingModule({
+        providers: [
+          I18nService,
+          provideI18n({
+            defaultLanguage: 'ar',
+            languages: LANGUAGES,
+            storageStrategy: 'none',
+            loader: {
+              resolve: jasmine.createSpy('resolve').and.resolveTo({ load: loadSpy }),
+            },
+          }),
+        ],
+      });
+      const service = TestBed.inject(I18nService);
+      await service.loadTranslations('ar');
+      expect(service.translate('home')).toBe('home');
+    });
+
+    it('should return defaultValue for partial path that resolves to non-string', async () => {
+      const loadSpy = jasmine.createSpy('load').and.resolveTo({ ...NESTED_TRANSLATIONS });
+      TestBed.configureTestingModule({
+        providers: [
+          I18nService,
+          provideI18n({
+            defaultLanguage: 'ar',
+            languages: LANGUAGES,
+            storageStrategy: 'none',
+            loader: {
+              resolve: jasmine.createSpy('resolve').and.resolveTo({ load: loadSpy }),
+            },
+          }),
+        ],
+      });
+      const service = TestBed.inject(I18nService);
+      await service.loadTranslations('ar');
+      expect(service.translate('home', 'Homepage')).toBe('Homepage');
+    });
+
+    it('should resolve flat keys from nested object too', async () => {
+      const loadSpy = jasmine.createSpy('load').and.resolveTo({ ...NESTED_TRANSLATIONS });
+      TestBed.configureTestingModule({
+        providers: [
+          I18nService,
+          provideI18n({
+            defaultLanguage: 'ar',
+            languages: LANGUAGES,
+            storageStrategy: 'none',
+            loader: {
+              resolve: jasmine.createSpy('resolve').and.resolveTo({ load: loadSpy }),
+            },
+          }),
+        ],
+      });
+      const service = TestBed.inject(I18nService);
+      await service.loadTranslations('ar');
+      expect(service.translate('onlyString')).toBe('نص مباشر');
+    });
   });
 
   describe('loadedTranslations', () => {
@@ -371,9 +485,9 @@ describe('I18nService', () => {
 
   describe('race condition guard', () => {
     function setupControlled() {
-      const resolvers = new Map<string, (value: Record<string, string>) => void>();
+      const resolvers = new Map<string, (value: Record<string, unknown>) => void>();
       const loadSpy = jasmine.createSpy('load').and.callFake((lang: string) =>
-        new Promise<Record<string, string>>((resolve) => resolvers.set(lang, resolve)),
+        new Promise<Record<string, unknown>>((resolve) => resolvers.set(lang, resolve)),
       );
       TestBed.configureTestingModule({
         providers: [
@@ -389,7 +503,7 @@ describe('I18nService', () => {
         ],
       });
       const service = TestBed.inject(I18nService);
-      return { service, loadSpy, resolve: (lang: string, data: Record<string, string>) => resolvers.get(lang)?.(data) };
+      return { service, loadSpy, resolve: (lang: string, data: Record<string, unknown>) => resolvers.get(lang)?.(data) };
     }
 
     it('should discard stale out-of-order responses and keep last-requested data', async () => {
