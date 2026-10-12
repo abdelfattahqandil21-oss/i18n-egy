@@ -6,7 +6,7 @@ import {
 } from '../constants/defaults';
 import { I18N_CONFIG } from '../tokens/i18n-config.token';
 import { Direction } from '../types/direction';
-import { I18nConfig } from '../types/i18n-config';
+import { I18nConfig, TranslateParams } from '../types/i18n-config';
 import { Language } from '../types/language';
 import { StorageStrategy } from '../types/storage-strategy';
 import { Translation } from '../types/translation';
@@ -31,6 +31,7 @@ export class I18nService<L extends string = string> {
     this._config.loader?.resolve ?? null;
   private _resolvedLoader: TranslationLoader<L> | null = null;
   private readonly _translationsCache = new Map<L, Record<string, unknown>>();
+  private readonly _inflight = new Map<L, Promise<Record<string, unknown>>>();
   /**
    * Monotonically increasing counter used as a "last request wins" guard.
    * When the user switches languages rapidly, in-flight requests can resolve
@@ -59,6 +60,14 @@ export class I18nService<L extends string = string> {
 
   readonly isRtl = computed<boolean>(() => this.dir() === 'rtl');
 
+  private readonly _loadingState = signal<'idle' | 'loading' | 'error'>('idle');
+  private readonly _loadingError = signal<unknown>(null);
+
+  /** Current loader state — useful for skeletons/spinners (BRT lesson). */
+  readonly loadingState = this._loadingState.asReadonly();
+  readonly loadingError = this._loadingError.asReadonly();
+  readonly isLoading = computed(() => this._loadingState() === 'loading');
+
   constructor() {
     if (this._config.languages.length === 0) {
       throw new Error('[i18n-egy] At least one language must be provided in the languages array.');
@@ -86,7 +95,7 @@ export class I18nService<L extends string = string> {
     }
   }
 
-  private applyLanguage(id: L): void {
+  private applyLanguage(id: L, opts?: { skipLoad?: boolean }): void {
     if (id === this._currentLanguageId()) return;
 
     const lang = this._languages().find((l) => l.id === id);
@@ -108,26 +117,32 @@ export class I18nService<L extends string = string> {
       apply();
     }
 
-    this._loadTranslations(id);
+    if (!opts?.skipLoad) {
+      // Background load — errors are recorded on signals, never thrown here.
+      void this._loadTranslations(id);
+    }
   }
 
   getLanguage(id: L): Language<L> | undefined {
     return this._languages().find((l) => l.id === id);
   }
 
-  translate(key: string, defaultValue?: string): string;
+  translate(key: string, defaultValue?: string, params?: TranslateParams): string;
+  translate(key: string, params?: TranslateParams): string;
 
   translate(translations: Translation<L>): string;
 
   translate(
     keyOrTranslations: string | Translation<L>,
-    defaultValue?: string,
+    defaultValueOrParams?: string | TranslateParams,
+    maybeParams?: TranslateParams,
   ): string {
     if (typeof keyOrTranslations === 'string') {
+      const { defaultValue, params } = normalizeKeyArgs(defaultValueOrParams, maybeParams);
       const loaded = this._loadedTranslations();
       const resolved = this._resolveKey(loaded, keyOrTranslations);
       if (resolved !== undefined) {
-        return resolved;
+        return interpolate(resolved, params);
       }
       if (!this._config.loader && !this._warnedNoLoader) {
         this._warnedNoLoader = true;
@@ -137,7 +152,8 @@ export class I18nService<L extends string = string> {
           );
         }
       }
-      return defaultValue ?? keyOrTranslations;
+      const fallback = defaultValue ?? keyOrTranslations;
+      return params ? interpolate(fallback, params) : fallback;
     }
     const currentId = this._currentLanguageId();
     return keyOrTranslations[currentId] ?? Object.values(keyOrTranslations)[0] ?? '';
@@ -145,8 +161,11 @@ export class I18nService<L extends string = string> {
 
   loadedTranslations = this._loadedTranslations.asReadonly();
 
-  async loadTranslations(languageId: L): Promise<Record<string, unknown>> {
-    return this._loadTranslations(languageId);
+  async loadTranslations(
+    languageId: L,
+    opts?: { silent?: boolean },
+  ): Promise<Record<string, unknown>> {
+    return this._loadTranslations(languageId, opts);
   }
 
   toggle(): void {
@@ -174,47 +193,85 @@ export class I18nService<L extends string = string> {
   }
 
   setLanguage(id: L): void {
+    if (this._config.switchStrategy === 'preload-first') {
+      // Fire-and-forget preload-first: never flash raw keys.
+      void this.setLanguageAsync(id);
+      return;
+    }
     this.applyLanguage(id);
   }
 
-  private async _loadTranslations(languageId: L): Promise<Record<string, unknown>> {
-    if (!this._getLoader) return {};
+  /**
+   * Preload-first switch (BRT lesson): await the dictionary, then flip
+   * the signal so templates never render raw keys. Ideal inside View
+   * Transitions / route language-prefix switches.
+   */
+  async setLanguageAsync(id: L): Promise<void> {
+    if (id === this._currentLanguageId()) return;
+    if (!this._languages().some((l) => l.id === id)) return;
+    // Silent preload: cache only, don't touch the visible signal while
+    // the UI is still on the old language. applyLanguage() then flips
+    // the signal and syncs the dict from cache in the same tick.
+    await this._loadTranslations(id, { silent: true });
+    this.applyLanguage(id);
+  }
 
-    // Capture this request's token. If a newer call increments
-    // _requestToken before this one finishes, we must not overwrite
-    // _loadedTranslations with stale data (out-of-order resolution
-    // from rapid language switching).
-    const myToken = ++this._requestToken;
+  private async _loadTranslations(
+    languageId: L,
+    opts?: { silent?: boolean },
+  ): Promise<Record<string, unknown>> {
+    if (!this._getLoader) return {};
 
     const cached = this._translationsCache.get(languageId);
     if (cached) {
-      // Cache-hit path: only update the signal if this call
-      // is still the most recent one.
-      if (myToken === this._requestToken) {
+      if (!opts?.silent) {
         this._loadedTranslations.set(cached);
       }
       return cached;
     }
 
-    try {
-      if (!this._resolvedLoader) {
-        this._resolvedLoader = await this._getLoader();
+    // Dedupe concurrent loads for the same language (BRT loadingLanguages map).
+    const inflight = this._inflight.get(languageId);
+    if (inflight) return inflight;
+
+    const myToken = ++this._requestToken;
+    this._loadingState.set('loading');
+
+    const task = (async () => {
+      try {
+        if (!this._resolvedLoader) {
+          this._resolvedLoader = await this._getLoader!();
+        }
+        const translations = await this._resolvedLoader.load(languageId);
+
+        this._translationsCache.set(languageId, translations);
+
+        // Last-request-wins: stale out-of-order responses stay cached
+        // but never overwrite the visible signal.
+        if (myToken === this._requestToken && !opts?.silent) {
+          this._loadedTranslations.set(translations);
+          this._loadingError.set(null);
+          this._loadingState.set('idle');
+        }
+
+        return translations;
+      } catch (error) {
+        if (myToken === this._requestToken) {
+          this._loadingError.set(error);
+          this._loadingState.set('error');
+        }
+        this._config.onLoadError?.(languageId, error);
+        return {};
+      } finally {
+        this._inflight.delete(languageId);
+        if (this._inflight.size === 0 && this._loadingState() === 'loading') {
+          this._loadingState.set('idle');
+        }
       }
-      const translations = await this._resolvedLoader.load(languageId);
+    })();
 
-      // Always cache the result — even if this call lost the race,
-      // the data is correct and useful for future lookups.
-      this._translationsCache.set(languageId, translations);
-
-      // Network path: only update the signal if still the most recent call.
-      if (myToken === this._requestToken) {
-        this._loadedTranslations.set(translations);
-      }
-
-      return translations;
-    } catch {
-      return {};
-    }
+    this._inflight.set(languageId, task);
+    return task;
   }
 
   private _resolveKey(obj: Record<string, unknown>, path: string): string | undefined {
@@ -225,7 +282,10 @@ export class I18nService<L extends string = string> {
           : undefined,
       obj,
     );
-    return typeof value === 'string' ? value : undefined;
+    // BRT lesson: dictionaries may hold numbers/booleans — stringify them.
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    return undefined;
   }
 
   private _resolveInitialLanguage(): L {
@@ -235,4 +295,22 @@ export class I18nService<L extends string = string> {
     }
     return this._config.defaultLanguage;
   }
+}
+
+function normalizeKeyArgs(
+  second?: string | TranslateParams,
+  third?: TranslateParams,
+): { defaultValue?: string; params?: TranslateParams } {
+  if (second && typeof second === 'object') {
+    return { params: second };
+  }
+  return { defaultValue: second, params: third };
+}
+
+function interpolate(template: string, params?: TranslateParams): string {
+  if (!params) return template;
+  return template.replace(/\{(\w+)\}/g, (match, name: string) => {
+    const value = params[name];
+    return value === undefined || value === null ? match : String(value);
+  });
 }

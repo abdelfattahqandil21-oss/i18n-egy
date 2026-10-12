@@ -1,6 +1,7 @@
 import { Pipe, inject } from '@angular/core';
 import { I18nService } from '../services/i18n.service';
 import { Translation } from '../types/translation';
+import { TranslateParams } from '../types/i18n-config';
 
 /**
  * Template pipe for translating keys or inline translation objects.
@@ -49,7 +50,8 @@ export class TranslatePipe<L extends string = string> {
    * @param defaultValue - Optional fallback string if the key is not found.
    * @returns The translated string, or `defaultValue ?? key` if not found.
    */
-  transform(key: string, defaultValue?: string): string;
+  transform(key: string, defaultValue?: string, params?: TranslateParams): string;
+  transform(key: string, params?: TranslateParams): string;
 
   /**
    * Translate an inline typed object for the current language.
@@ -63,8 +65,9 @@ export class TranslatePipe<L extends string = string> {
 
   transform(
     keyOrTranslations: string | Translation<L>,
-    defaultValue?: string,
+    defaultValueOrParams?: string | TranslateParams,
+    maybeParams?: TranslateParams,
   ): string {
-    return this._i18n.translate(keyOrTranslations as any, defaultValue);
+    return this._i18n.translate(keyOrTranslations as any, defaultValueOrParams as any, maybeParams as any);
   }
 }

@@ -135,6 +135,8 @@ export class AppComponent {
 | `autoApplyDirection` | `boolean` | No | `true` | Auto-sync `dir`/`lang` on `<html>` |
 | `viewTransition` | `ViewTransitionConfig` | No | `undefined` | Optional language-switch animations |
 | `loader` | `LoaderDescriptor` | No | `undefined` | Pluggable translation loader for key-based `translate()` |
+| `switchStrategy` | `'instant' \| 'preload-first'` | No | `'instant'` | `preload-first` awaits the dictionary before flipping the signal — no raw-key flash |
+| `onLoadError` | `(lang, error) => void` | No | `undefined` | Hook for toasts/logging when a dictionary fails (service still falls back safely) |
 
 ### `Language`
 
@@ -228,14 +230,20 @@ The core service providing all i18n state and operations. Decorated with Angular
 | `dir()` | `'ltr' \| 'rtl'` | Current text direction |
 | `isRtl()` | `boolean` | Whether current language is RTL |
 | `languageChanged()` | `string` | Current language ID (emits on every change) |
+| `loadingState()` | `'idle' \| 'loading' \| 'error'` | Loader state for skeletons/spinners |
+| `loadingError()` | `unknown` | Last load failure, or `null` |
+| `isLoading()` | `boolean` | `true` while a dictionary is in flight |
 
 #### Methods
 
 | Method | Signature | Description |
 |---|---|---|
-| `translate(key, defaultValue?)` | `(key: string, defaultValue?: string) => string` | Translate a key with fallback |
+| `translate(key, defaultValue?, params?)` | `(key: string, defaultValue?: string, params?: TranslateParams) => string` | Key lookup with `{name}` interpolation; numbers/booleans stringified |
+| `translate(key, params?)` | `(key: string, params?: TranslateParams) => string` | Shorthand when no fallback needed |
 | `translate(translations)` | `(translations: Translation<L>) => string` | Translate from type-safe inline object |
-| `setLanguage(id)` | `(id: string) => void` | Switch to a specific language |
+| `setLanguage(id)` | `(id: string) => void` | Switch (respects `switchStrategy`) |
+| `setLanguageAsync(id)` | `(id: string) => Promise<void>` | Preload-first switch: await dict, then flip — no flash |
+| `loadTranslations(id)` | `(id: string) => Promise<Record<string, unknown>>` | Preload without switching (use in `APP_INITIALIZER` / route guards) |
 | `toggle()` | `() => void` | Toggle between first two languages |
 | `next()` | `() => void` | Cycle to the next language |
 | `previous()` | `() => void` | Cycle to the previous language |
@@ -446,6 +454,95 @@ export class LangSwitcherComponent {
 
 ---
 
+## Use cases (v2.2)
+
+### 1. Route-level switch without flashing raw keys (BRT pattern)
+
+Problem: `setLanguage()` flips instantly while JSON is still loading — users see `BOOK_TICKET.TITLE` for a frame.
+
+```typescript
+// app.config.ts
+provideI18n({
+  defaultLanguage: 'ar',
+  languages: [
+    { id: 'ar', nativeName: 'العربية', dir: 'rtl' },
+    { id: 'en', nativeName: 'English', dir: 'ltr' },
+  ],
+  loader: jsonLoader({ path: 'assets/i18n' }),
+  switchStrategy: 'preload-first',
+});
+```
+
+```typescript
+// language-switcher.component.ts
+async switchTo(lang: 'ar' | 'en') {
+  await this.i18n.setLanguageAsync(lang); // preload silently, then flip
+  await this.router.navigate(['/', lang, 'home']); // keep /:lang prefix
+}
+```
+
+### 2. Preload before first paint (`APP_INITIALIZER`)
+
+```typescript
+import { provideAppInitializer, inject } from '@angular/core';
+import { I18nService } from 'i18n-egy';
+
+provideAppInitializer(() => {
+  const i18n = inject(I18nService);
+  return i18n.loadTranslations(i18n.currentLanguage());
+});
+```
+
+### 3. Interpolation with params (ticket count, wallet balance)
+
+```json
+// assets/i18n/en.json
+{ "BOOKING": { "SEATS_LEFT": "{count} seats left", "BALANCE": "Balance: {amount} EGP" } }
+```
+
+```typescript
+i18n.translate('BOOKING.SEATS_LEFT', { count: 3 });           // "3 seats left"
+i18n.translate('BOOKING.BALANCE', 'Fallback', { amount: 50 }); // params apply to fallback too
+```
+
+```html
+<p>{{ 'BOOKING.SEATS_LEFT' | translate:{ count: ticketCount() } }}</p>
+```
+
+### 4. Loading skeleton + error toast
+
+```typescript
+provideI18n({
+  defaultLanguage: 'ar',
+  languages: [...],
+  loader: jsonLoader({ path: 'assets/i18n' }),
+  onLoadError: (lang, err) => toast.error(null, 'API_ERRORS.REQUEST_FAILED'),
+});
+```
+
+```html
+@if (i18n.isLoading()) {
+  <div class="skeleton">…</div>
+} @else if (i18n.loadingState() === 'error') {
+  <button (click)="retry()">Retry</button>
+} @else {
+  <h1>{{ 'HOME.TITLE' | translate }}</h1>
+}
+```
+
+### 5. Numbers/booleans in dictionaries
+
+```json
+{ "PAGINATION": { "PAGE": 1, "HAS_MORE": true } }
+```
+
+```typescript
+i18n.translate('PAGINATION.PAGE');     // "1" (stringified, no fallback)
+i18n.translate('PAGINATION.HAS_MORE'); // "true"
+```
+
+---
+
 ## FAQ
 
 ### Does this load translation files?
@@ -477,8 +574,10 @@ Yes. The configuration accepts any number of languages. Adding a new language on
 
 - [x] Translation JSON file loading
 - [x] HTTP-based translation fetching
+- [x] Interpolation with parameters (`{name}`)
+- [x] Preload-first switching (`setLanguageAsync` / `switchStrategy`)
+- [x] Load error signals (`loadingState` / `loadingError` / `onLoadError`)
 - [ ] Pluralization support
-- [ ] Interpolation with parameters
 - [ ] Browser language detection
 - [ ] Cookie-based storage strategy
 - [ ] Locale formatting (dates, numbers, currencies)
