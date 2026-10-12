@@ -1,0 +1,10 @@
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  lmdb: true
+  msgpackr-extract: true
+
+# Angular 22.2.2's compiler-cli imports `encodeRangeMappings` but declares
+# `@jridgewell/sourcemap-codec@^1.4.14` (1.5.5 lacks the export — added in 1.6.0).
+overrides:
+  '@jridgewell/sourcemap-codec': ^1.6.0
